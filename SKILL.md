@@ -1,4 +1,4 @@
-# Skill: LiteRT Fast Migration Skill
+# Skill: LiteRT Compiled Model Migration SKILL
 
 ## Description
 This skill guides an AI agent to rapidly migrate an Android application from legacy TensorFlow Lite (TFLite) to the modern LiteRT CompiledModel API v2.1.6 across both **Google3 internal monorepos** and **Open Source GitHub repositories**. It prioritizes a high-speed, 1st-pass **"Like for Like" baseline migration** with automated self-testing, and encourages advanced performance upgrades including **True Asynchronous Execution (`runAsync`)**, **Zero-Copy I/O Buffer Management**, and **NPU JIT compilation**.
@@ -26,7 +26,7 @@ The agent must automatically inspect the repository structure:
 The agent must present the following review options to the user:
 
 ```
-Before initiating the LiteRT Fast Migration, please confirm your project preferences:
+Before initiating the LiteRT Compiled Model Migration, please confirm your project preferences:
 
 1. Ecosystem & Build Toolchain:
    Which target environment are we migrating?
