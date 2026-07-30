@@ -76,7 +76,11 @@ Phase 1 prioritizes functional equivalence, fast compilation, and immediate 1st 
 ### Step 1: Clean & Modernize Dependencies
 
 Inspect `libs.versions.toml` and `build.gradle.kts`:
-* **Remove Legacy**: `org.tensorflow:tensorflow-lite`, `org.tensorflow:tensorflow-lite-gpu`, `org.tensorflow:tensorflow-lite-support`.
+* **Remove Legacy & Deprecated**:
+  * `org.tensorflow:tensorflow-lite`
+  * `org.tensorflow:tensorflow-lite-gpu`
+  * `org.tensorflow:tensorflow-lite-support`
+  * `org.tensorflow:tensorflow-lite-select-tf-ops` *(Legacy Flex Delegate — see Deprecated API Remediation below)*
 * **Replace TFLite Support Image Preprocessing**: If the application uses legacy TFLite Support (`org.tensorflow.lite.support.image.ImageProcessor`, `ResizeOp`, `NormalizeOp`), **completely remove the Support library dependency**. Replace image scaling with `androidx.core.graphics.scale` (or `Bitmap.createScaledBitmap`) and replace normalization with direct memory-mapped pixel buffer writing (`ByteBuffer.allocateDirect` / `AHardwareBuffer`).
 * **Add Modern LiteRT**:
   * *Standalone*: `implementation 'com.google.ai.edge.litert:litert:2.1.6'`
@@ -84,7 +88,22 @@ Inspect `libs.versions.toml` and `build.gradle.kts`:
 * **IDE Portability**: Remove hardcoded `org.gradle.java.home` from `gradle.properties` and exclude `local.properties`.
 * **Kotlin Compiler DSL**: Use top-level `kotlin { compilerOptions { ... } }` outside `android { ... }`.
 
-### Step 2: Native Build Toolchain (`CMakeLists.txt` / NDK)
+### Step 2: Deprecated API & Delegate Remediation
+
+The agent must audit and replace all deprecated delegate APIs:
+
+1. **NNAPI Delegate (`NnApiDelegate`, `NnApiDelegate.Options`, `setUseNNAPI(true)`)**:
+   * **Status**: Deprecated in Android 12+ and removed in LiteRT V2.
+   * **Remediation**: Remove `org.tensorflow.lite.delegates.NnApiDelegate` imports. Replace with `CompiledModel.Options(Accelerator.NPU)` combined with `Environment.create(BuiltinNpuAcceleratorProvider(context), envOptions)`. Implement an explicit `NPU -> GPU -> CPU` fallback cascade to handle non-NPU hardware smoothly.
+
+2. **Flex Delegate (`SelectDelegate`, `org.tensorflow.lite.flex`, `select-tf-ops`)**:
+   * **Status**: Deprecated and incompatible with LiteRT V2 zero-copy and NPU acceleration (bloats APK size by ~30 MB with full TF runtime).
+   * **Remediation**:
+     * Remove `org.tensorflow:tensorflow-lite-select-tf-ops` from `build.gradle.kts`.
+     * Audit model ops using `litert_gpu_toolkit` or Flatbuffer inspection to identify unsupported Flex ops.
+     * Replace Flex ops by re-exporting the model via modern LiteRT converters (`ai_edge_torch` or `ai_edge_quantizer`), or implement native LiteRT custom ops via `litert/cc/litert_custom_op.h` if custom C++ math is required.
+
+### Step 3: Native Build Toolchain (`CMakeLists.txt` / NDK)
 For native C++ modules, update `CMakeLists.txt`:
 ```cmake
 # Replace legacy tensorflowlite_jni with LiteRt
@@ -99,7 +118,7 @@ target_link_libraries(your_native_lib
 )
 ```
 
-### Step 3: API & Lifecycle Refactoring (Rewrite Initialization & Dynamic Signatures)
+### Step 4: API & Lifecycle Refactoring (Rewrite Initialization & Dynamic Signatures)
 
 > [!IMPORTANT]
 > **Never Simple Swap**: Do **NOT** merely perform a search-and-replace of the `Interpreter` class. Rewrite the model initialization logic to instantiate `CompiledModel` with an explicit hardware fallback cascade (`NPU -> GPU -> CPU`). When NPU is selected, prioritize NPU JIT compilation by instantiating an explicit `Environment` object (`Environment.create(BuiltinNpuAcceleratorProvider(context), envOptions)`) configured with `DispatchLibraryDir` and `CompilerPluginLibraryDir` pointing to `context.applicationInfo.nativeLibraryDir`.
@@ -110,12 +129,13 @@ target_link_libraries(your_native_lib
 | `Interpreter(modelFile, options)` | `CompiledModel.create(modelPath, options, env)` *(via NPU Environment & Fallback Cascade)* |
 | `interpreter.run(input, output)` | `compiledModel.run(inputBuffers, outputBuffers)` |
 | `GpuDelegate()` / `NnApiDelegate()` | `CompiledModel.Options(Accelerator.GPU / NPU / CPU)` |
+| `org.tensorflow.lite.flex.FlexDelegate` | Native LiteRT op / `CompiledModel.Options(Accelerator.NPU / GPU)` |
 | `interpreter.getInputTensor(0)` | `compiledModel.getInputTensorType("args_0")` (Fallback: `"input_0"`) |
 | `ImageProcessor.Builder().add(ResizeOp(...)).build()` | `androidx.core.graphics.scale(width, height)` / `Bitmap.createScaledBitmap` |
 | `#include "tensorflow/lite/interpreter.h"` | `#include "litert/cc/litert_compiled_model.h"` |
 | `#include "tensorflow/lite/c/c_api.h"` | `#include "litert/c/litert_compiled_model.h"` |
 
-### Step 4: Two-Stage Fast Verification Gate (Karpathy Self-Test)
+### Step 5: Two-Stage Fast Verification Gate (Karpathy Self-Test)
 To maximize execution speed:
 * **Stage 1 (Refactoring Gate)**: Run fast incremental compile checks only (`./gradlew compileDebugKotlin` or `./gradlew assembleDebug`) to verify syntax in seconds.
 * **Stage 2 (Final Verification Gate)**: Copy `templates/MigrationValidationTest.kt` into `androidTest/` and execute full packaging (`./gradlew assembleDebug assembleDebugAndroidTest` and `./gradlew testDebugUnitTest`).
