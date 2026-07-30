@@ -101,7 +101,7 @@ The agent must audit and replace all deprecated delegate APIs:
    * **Remediation**:
      * Remove `org.tensorflow:tensorflow-lite-select-tf-ops` from `build.gradle.kts`.
      * Audit model ops using `litert_gpu_toolkit` or Flatbuffer inspection to identify unsupported Flex ops.
-     * Replace Flex ops by re-exporting the model via modern LiteRT converters (`ai_edge_torch` or `ai_edge_quantizer`), or implement native LiteRT custom ops via `litert/cc/litert_custom_op.h` if custom C++ math is required.
+     * Replace Flex ops by re-exporting the model via modern LiteRT converters (`litert_torch` / `LiteRT-torch` or `ai_edge_quantizer`), or implement native LiteRT custom ops via `litert/cc/litert_custom_op.h` if custom C++ math is required.
 
 ### Step 3: Native Build Toolchain (`CMakeLists.txt` / NDK)
 For native C++ modules, update `CMakeLists.txt`:
