@@ -1,7 +1,12 @@
+---
+name: litert-compiled-model-migration
+description: Rapidly migrate an Android application from legacy TensorFlow Lite (TFLite) to modern LiteRT CompiledModel API v2.1.6 in Open Source GitHub repositories. Supports True Async Execution (runAsync), Zero-Copy I/O Buffers, NPU JIT compilation, and automated 2-stage verification self-testing.
+---
+
 # Skill: LiteRT Compiled Model Migration SKILL
 
 ## Description
-This skill guides an AI agent to rapidly migrate an Android application from legacy TensorFlow Lite (TFLite) to the modern LiteRT CompiledModel API v2.1.6 across both **Google3 internal monorepos** and **Open Source GitHub repositories**. It prioritizes a high-speed, 1st-pass **"Like for Like" baseline migration** with automated self-testing, and encourages advanced performance upgrades including **True Asynchronous Execution (`runAsync`)**, **Zero-Copy I/O Buffer Management**, and **NPU JIT compilation**.
+This skill guides an AI agent to rapidly migrate an Android application from legacy TensorFlow Lite (TFLite) to the modern LiteRT CompiledModel API v2.1.6 in **Open Source GitHub repositories**. It prioritizes a high-speed, 1st-pass **"Like for Like" baseline migration** with automated self-testing, and encourages advanced performance upgrades including **True Asynchronous Execution (`runAsync`)**, **Zero-Copy I/O Buffer Management**, and **NPU JIT compilation**.
 
 ---
 
@@ -12,10 +17,9 @@ Before writing code, the agent MUST inspect the project workspace and present th
 ### A. Automatic Workspace & Toolchain Discovery
 The agent must automatically inspect the repository structure:
 1. **Ecosystem & Build Engine**:
-   * **Google3 Workspace**: Detected by Piper depot paths, `BUILD` files, or CitC client root. -> Enable **Blaze Build & Piper CL Workflow**.
-   * **Open Source Workspace**: Detected by `build.gradle`, `build.gradle.kts`, or `settings.gradle`. -> Enable **Gradle & GitHub PR Workflow**.
+   * **Gradle Build System**: Detected by `build.gradle`, `build.gradle.kts`, or `settings.gradle`. -> Enable **Gradle & GitHub PR Workflow**.
 2. **Language & JNI Toolchain**:
-   * **Native C++**: Detected if `CMakeLists.txt`, `Android.mk`, or `*.cpp` files exist. -> Enable **C++ / JNI Migration Rules**.
+   * **Native C++ / NDK**: Detected if `CMakeLists.txt`, `Android.mk`, or `*.cpp` files exist. -> Enable **C++ / JNI Migration Rules**.
    * **Pure Kotlin / Java**: Default to **JVM / Android SDK Migration Rules**.
 
 > [!TIP]
@@ -28,25 +32,20 @@ The agent must present the following review options to the user:
 ```
 Before initiating the LiteRT Compiled Model Migration, please confirm your project preferences:
 
-1. Ecosystem & Build Toolchain:
-   Which target environment are we migrating?
-   - [A] Open Source / External Android App (Gradle build, GitHub PR) [Default if build.gradle exists]
-   - [B] Google3 Monorepo Component (Blaze build, Piper CL) [Default if BUILD file exists]
-
-2. Model Workload & Domain:
+1. Model Workload & Domain:
    What type of data does this application process?
    - [A] Vision (Images / Video / Camera Feeds) -> Enables Zero-Copy AHardwareBuffer / direct ByteBuffer recipes.
    - [B] Audio (Speech / Sound Classification) -> Enables streaming FloatArray or ByteBuffer recipes.
    - [C] Text / NLP / GenAI -> Enables tokenized tensor buffer recipes.
 
-3. LiteRT Runtime Target SDK:
+2. LiteRT Runtime Target SDK:
    Which SDK distribution target should the project use?
    - [A] Standalone / Bundled LiteRT V2 (com.google.ai.edge.litert:litert) [Default]
          -> Bundles LiteRT runtime inside the APK for offline self-contained operation.
    - [B] LiteRT-in-GMSCore (com.google.android.gms:play-services-litert)
          -> Dynamically requests runtime from Google Play Services, saving ~5 MB APK binary bloat.
 
-4. Hardware Acceleration & Conditional INT8 Quantization:
+3. Hardware Acceleration & Conditional INT8 Quantization:
    Do you want to enable NPU hardware acceleration via JIT on-device compilation?
    - [A] Yes (Recommended - replaces deprecated NNAPI) [Default]
          * If the app uses a Float32 model: Would you like to generate an INT8 integer-quantized model via AI Edge Quantizer for peak NPU speed, or run the original Float32 model?
@@ -54,14 +53,14 @@ Before initiating the LiteRT Compiled Model Migration, please confirm your proje
            -> Option A.2: Keep Float32 (Runs baseline float model directly on NPU)
    - [B] No (GPU and CPU acceleration only)
 
-5. Encouraged Performance Upgrades:
+4. Encouraged Performance Upgrades:
    Should the agent upgrade the calling code to use LiteRT's advanced features?
    - [A] Yes (Enable True Async Execution runAsync & Zero-Copy I/O Buffers) [Default]
    - [B] No (Keep strict 1-to-1 synchronous baseline execution)
 
-6. Automated PR / CL Provisioning:
-   Should the agent automatically stage, commit, and create a PR or Piper CL when self-testing passes?
-   - [A] Yes [Default] (Attaches verification test logs; includes TAG=agy for Google3 CLs)
+5. Automated Pull Request Provisioning:
+   Should the agent automatically stage, commit, and create a GitHub PR when self-testing passes?
+   - [A] Yes [Default] (Attaches verification test logs and before/after summary diff)
    - [B] No (Keep changes local in current working branch)
 ```
 
@@ -76,7 +75,6 @@ Phase 1 prioritizes functional equivalence, fast compilation, and immediate 1st 
 
 ### Step 1: Clean & Modernize Dependencies
 
-#### Open Source (Gradle):
 Inspect `libs.versions.toml` and `build.gradle.kts`:
 * **Remove Legacy**: `org.tensorflow:tensorflow-lite`, `org.tensorflow:tensorflow-lite-gpu`, `org.tensorflow:tensorflow-lite-support`.
 * **Replace TFLite Support Image Preprocessing**: If the application uses legacy TFLite Support (`org.tensorflow.lite.support.image.ImageProcessor`, `ResizeOp`, `NormalizeOp`), **completely remove the Support library dependency**. Replace image scaling with `androidx.core.graphics.scale` (or `Bitmap.createScaledBitmap`) and replace normalization with direct memory-mapped pixel buffer writing (`ByteBuffer.allocateDirect` / `AHardwareBuffer`).
@@ -85,11 +83,6 @@ Inspect `libs.versions.toml` and `build.gradle.kts`:
   * *GMSCore*: `implementation 'com.google.android.gms:play-services-litert:16.0.0'`
 * **IDE Portability**: Remove hardcoded `org.gradle.java.home` from `gradle.properties` and exclude `local.properties`.
 * **Kotlin Compiler DSL**: Use top-level `kotlin { compilerOptions { ... } }` outside `android { ... }`.
-
-#### Google3 (Blaze):
-Inspect `BUILD` files:
-* **Update Target Dependencies**: Replace `//third_party/tensorflow/lite:...` dependencies with `//third_party/tensorflow/lite/c:litert` or `//third_party/tensorflow/lite/kotlin:litert`.
-* **Build Verification**: Run `SKYBUILD=1 blaze build //path/to:target`.
 
 ### Step 2: Native Build Toolchain (`CMakeLists.txt` / NDK)
 For native C++ modules, update `CMakeLists.txt`:
@@ -124,8 +117,8 @@ target_link_libraries(your_native_lib
 
 ### Step 4: Two-Stage Fast Verification Gate (Karpathy Self-Test)
 To maximize execution speed:
-* **Stage 1 (Refactoring Gate)**: Run fast incremental compile checks only (`./gradlew compileDebugKotlin` or `blaze build //path/to:target`) to verify syntax in seconds.
-* **Stage 2 (Final Verification Gate)**: Copy `templates/MigrationValidationTest.kt` into `androidTest/` and execute full packaging (`./gradlew assembleDebug assembleDebugAndroidTest` or `blaze test //path/to:android_test`).
+* **Stage 1 (Refactoring Gate)**: Run fast incremental compile checks only (`./gradlew compileDebugKotlin` or `./gradlew assembleDebug`) to verify syntax in seconds.
+* **Stage 2 (Final Verification Gate)**: Copy `templates/MigrationValidationTest.kt` into `androidTest/` and execute full packaging (`./gradlew assembleDebug assembleDebugAndroidTest` and `./gradlew testDebugUnitTest`).
 
 ---
 
@@ -175,8 +168,7 @@ outputBuffers.forEach { it.close() }
 
 ---
 
-## 3. Phase 3: Automated PR / CL Provisioning
+## 3. Phase 3: Automated Pull Request Provisioning
 
 Once self-testing succeeds:
-* **Open Source (GitHub)**: Create a clean git commit, exclude `local.properties`, and run `gh pr create` with an attached before/after summary diff.
-* **Google3 (Piper / Critique)**: Create a Piper CL (`fig create` / `g4 upload`), format the CL description with mandatory tags (`TAG=agy`, `CONV=<conversation_id>`), and attach Sponge test logs.
+* **GitHub Pull Request**: Create a clean git commit, exclude `local.properties` and `.gradle/`, and run `gh pr create` with an attached before/after summary diff and test execution logs.
