@@ -42,7 +42,7 @@ Before initiating the LiteRT Compiled Model Migration, please confirm your proje
    Which SDK distribution target should the project use?
    - [A] Standalone / Bundled LiteRT V2 (com.google.ai.edge.litert:litert) [Default]
          -> Bundles LiteRT runtime inside the APK for offline self-contained operation.
-   - [B] LiteRT-in-GMSCore (com.google.android.gms:play-services-litert)
+   - [B] LiteRT-in-GMSCore (com.google.android.gms:play-services-litert) [Experimental / Future Release]
          -> Dynamically requests runtime from Google Play Services, saving ~5 MB APK binary bloat.
 
 3. Hardware Acceleration & Conditional INT8 Quantization:
